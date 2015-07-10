@@ -1,15 +1,15 @@
-#include "SoftModem.h"
+#include "SoftModemLong.h"
 
 #define TX_PIN      (3)
 #define RX_PIN1     (6)  // AIN0
 #define RX_PIN2     (7)  // AIN1
 
-SoftModem *SoftModem::activeObject = 0;
+SoftModemLong *SoftModemLong::activeObject = 0;
 
-SoftModem::SoftModem() {
+SoftModemLong::SoftModemLong() {
 }
 
-SoftModem::~SoftModem() {
+SoftModemLong::~SoftModemLong() {
 	end();
 }
 
@@ -86,7 +86,7 @@ static uint8_t _portLEDMask;
 
 enum { START_BIT = 0, DATA_BIT = 8, STOP_BIT = 9, INACTIVE = 0xff };
 
-void SoftModem::begin(void)
+void SoftModemLong::begin(void)
 {
 	//set received pin RX_PIN1 to INPUT mode, set it to LOW
 	pinMode(RX_PIN1, INPUT);
@@ -119,7 +119,7 @@ void SoftModem::begin(void)
 	//reset ring buffer of received buffer
 	_recvBufferHead = _recvBufferTail = 0;
 
-	SoftModem::activeObject = this;
+	SoftModemLong::activeObject = this;
 
 	//assign _lastTCNT to timer counter register TCNT2, TCNT2 increase by 1 for each timer clock,
 	// time clock can be set by prescale in timer counter control register TCCR2A & TCCR2B --> refer Datasheet
@@ -153,15 +153,15 @@ void SoftModem::begin(void)
 	DIDR1  = _BV(AIN1D) | _BV(AIN0D); 
 }
 
-void SoftModem::end(void)
+void SoftModemLong::end(void)
 {
 	ACSR   &= ~(_BV(ACIE));
 	TIMSK2 &= ~(_BV(OCIE2A));
 	DIDR1  &= ~(_BV(AIN1D) | _BV(AIN0D));
-	SoftModem::activeObject = 0;
+	SoftModemLong::activeObject = 0;
 }
 
-void SoftModem::demodulate(void)
+void SoftModemLong::demodulate(void)
 {
 	uint8_t t = TCNT2;
 	uint8_t diff;
@@ -206,10 +206,10 @@ void SoftModem::demodulate(void)
 
 ISR(ANALOG_COMP_vect)
 {
-	SoftModem::activeObject->demodulate();
+	SoftModemLong::activeObject->demodulate();
 }
 
-void SoftModem::recv(void)
+void SoftModemLong::recv(void)
 {
 	uint8_t high;
 	if(_highCount > _lowCount){
@@ -257,18 +257,18 @@ void SoftModem::recv(void)
 ISR(TIMER2_COMPA_vect)
 {
 	OCR2A += (uint8_t)TCNT_BIT_PERIOD;
-	SoftModem::activeObject->recv();
+	SoftModemLong::activeObject->recv();
 #if SOFT_MODEM_DEBUG_ENABLE
 	*_portLEDReg ^= _portLEDMask;
 #endif  
 }
 
-int SoftModem::available()
+int SoftModemLong::available()
 {
 	return (_recvBufferTail + SOFT_MODEM_RX_BUF_SIZE - _recvBufferHead) & (SOFT_MODEM_RX_BUF_SIZE - 1);
 }
 
-int SoftModem::read()
+int SoftModemLong::read()
 {
 	if(_recvBufferHead == _recvBufferTail)
 		return -1;
@@ -277,19 +277,19 @@ int SoftModem::read()
 	return d;
 }
 
-int SoftModem::peek()
+int SoftModemLong::peek()
 {
 	if(_recvBufferHead == _recvBufferTail)
 		return -1;
 	return _recvBuffer[_recvBufferHead];
 }
 
-void SoftModem::flush()
+void SoftModemLong::flush()
 {
 	_recvBufferHead = _recvBufferTail = 0;
 }
 
-void SoftModem::modulate(uint8_t b)
+void SoftModemLong::modulate(uint8_t b)
 {
 	uint8_t cnt,tcnt,tcnt2;
 	if(b){ //if modulated bit is HIGH
@@ -363,7 +363,7 @@ void SoftModem::modulate(uint8_t b)
 //  ...
 //  1 push bit (HIGH)
 
-size_t SoftModem::write(const uint8_t *buffer, size_t size)
+size_t SoftModemLong::write(const uint8_t *buffer, size_t size)
 {
     uint8_t cnt = ((micros() - _lastWriteTime) / BIT_PERIOD) + 1;
     if(cnt > MAX_CARRIR_BITS)
@@ -389,7 +389,38 @@ size_t SoftModem::write(const uint8_t *buffer, size_t size)
     return n;
 }
 
-size_t SoftModem::write(uint8_t data)
+size_t SoftModemLong::write(uint8_t data)
 {
     return write(&data, 1);
+}
+
+size_t SoftModemLong::writeLong(const uint32_t *buffer, size_t size)
+{
+	uint8_t cnt = ((micros() - _lastWriteTime) / BIT_PERIOD) + 1;
+    if(cnt > MAX_CARRIR_BITS)
+        cnt = MAX_CARRIR_BITS;
+    for(uint8_t i = 0; i<cnt; i++)
+        modulate(HIGH);
+    size_t n = size;
+    while (size--) {
+        uint32_t data = *buffer++;
+        modulate(LOW);							 // Start Bit
+        for(uint32_t mask = 1; mask; mask <<= 1){ // Data Bits
+            if(data & mask){
+                modulate(HIGH);
+            }
+            else{
+                modulate(LOW);
+            }
+        }
+        modulate(HIGH);				// Stop Bit
+    }
+	modulate(HIGH);				// Push Bit
+    _lastWriteTime = micros();
+    return n;
+}
+
+size_t SoftModemLong::writeLong(uint32_t data)
+{
+	return writeLong(&data, 4);
 }

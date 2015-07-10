@@ -1,5 +1,5 @@
-#ifndef SoftModem_h
-#define SoftModem_h
+#ifndef SoftModemLong_h
+#define SoftModemLong_h
 
 #include <Arduino.h>
 
@@ -30,7 +30,7 @@
 
 #define SOFT_MODEM_DEBUG_ENABLE  (0)
 
-class SoftModem : public Stream
+class SoftModemLong : public Stream
 {
 private:
 	volatile uint8_t *_txPortReg;
@@ -47,8 +47,8 @@ private:
     unsigned long _lastWriteTime;
 	void modulate(uint8_t b);
 public:
-	SoftModem();
-	~SoftModem();
+	SoftModemLong();
+	~SoftModemLong();
 	void begin(void);
 	void end(void);
 	virtual int available();
@@ -56,10 +56,12 @@ public:
 	virtual void flush();
 	virtual int peek();
     virtual size_t write(const uint8_t *buffer, size_t size);
+    virtual size_t writeLong(const uint32_t *buffer, size_t size);
 	virtual size_t write(uint8_t data);
+	virtual size_t writeLong(uint32_t data);
 	void demodulate(void);
 	void recv(void);
-	static SoftModem *activeObject;
+	static SoftModemLong *activeObject;
 };
 
 #endif
